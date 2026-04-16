@@ -1,0 +1,580 @@
+<!DOCTYPE html>
+<html lang="pt-BR" x-data="app()" x-init="init()">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Minha Vida</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <style>
+    [x-cloak]{display:none!important}
+    .fade-in{animation:fadeIn .2s ease}
+    @keyframes fadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+    .chat-bubble-user{background:#6366f1;color:#fff;border-radius:18px 18px 4px 18px}
+    .chat-bubble-ai{background:#f1f5f9;color:#1e293b;border-radius:18px 18px 18px 4px}
+    textarea{resize:vertical}
+    ::-webkit-scrollbar{width:6px}::-webkit-scrollbar-thumb{background:#cbd5e1;border-radius:3px}
+  </style>
+</head>
+<body class="bg-slate-50 text-slate-800 font-sans min-h-screen flex">
+
+<!-- SIDEBAR -->
+<aside class="w-16 md:w-64 bg-indigo-900 text-white flex flex-col h-screen sticky top-0 shrink-0">
+  <div class="p-4 md:p-6 border-b border-indigo-800 flex items-center gap-3">
+    <span class="text-2xl">🧠</span>
+    <div class="hidden md:block">
+      <h1 class="text-lg font-bold leading-tight">Minha Vida</h1>
+      <p class="text-indigo-300 text-xs">Assistente pessoal</p>
+    </div>
+  </div>
+  <nav class="flex-1 p-2 md:p-4 space-y-1">
+    <template x-for="item in navItems" :key="item.id">
+      <button @click="page=item.id"
+        :class="page===item.id?'bg-indigo-700 text-white':'text-indigo-200 hover:bg-indigo-800'"
+        class="w-full flex items-center gap-3 px-3 md:px-4 py-3 rounded-lg text-sm font-medium transition justify-center md:justify-start">
+        <span x-text="item.icon" class="text-xl"></span>
+        <span class="hidden md:inline" x-text="item.label"></span>
+      </button>
+    </template>
+  </nav>
+  <div class="hidden md:block p-4 border-t border-indigo-800 text-xs text-indigo-400">v1.0 · feito para você ❤️</div>
+</aside>
+
+<!-- MAIN -->
+<main class="flex-1 overflow-y-auto">
+
+  <!-- DASHBOARD -->
+  <div x-show="page==='dashboard'" x-cloak class="p-6 md:p-8 fade-in">
+    <h2 class="text-2xl font-bold mb-6">Visão Geral</h2>
+    <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+      <div class="bg-white rounded-2xl p-5 shadow-sm border border-slate-100">
+        <p class="text-slate-500 text-sm">Tarefas pendentes</p>
+        <p class="text-3xl font-bold text-indigo-600 mt-1" x-text="stats.pending"></p>
+      </div>
+      <div class="bg-white rounded-2xl p-5 shadow-sm border border-slate-100">
+        <p class="text-slate-500 text-sm">Notas</p>
+        <p class="text-3xl font-bold text-emerald-600 mt-1" x-text="notes.length"></p>
+      </div>
+      <div class="bg-white rounded-2xl p-5 shadow-sm border border-slate-100">
+        <p class="text-slate-500 text-sm">Saldo</p>
+        <p class="text-3xl font-bold mt-1" :class="summary.balance>=0?'text-emerald-600':'text-red-500'"
+           x-text="'R$ '+summary.balance.toFixed(2)"></p>
+      </div>
+      <div class="bg-white rounded-2xl p-5 shadow-sm border border-slate-100">
+        <p class="text-slate-500 text-sm">Concluídas</p>
+        <p class="text-3xl font-bold text-slate-400 mt-1" x-text="stats.done"></p>
+      </div>
+    </div>
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div class="bg-white rounded-2xl p-6 shadow-sm border border-slate-100">
+        <h3 class="font-semibold text-slate-700 mb-4">📋 Tarefas Urgentes</h3>
+        <div class="space-y-3">
+          <template x-for="t in urgentTasks.slice(0,5)" :key="t.id">
+            <div class="flex items-center gap-3 p-3 bg-slate-50 rounded-xl">
+              <span :class="priDot(t.priority)" class="w-2 h-2 rounded-full shrink-0"></span>
+              <div class="flex-1 min-w-0">
+                <p class="text-sm font-medium truncate" x-text="t.title"></p>
+                <p class="text-xs text-slate-400" x-text="t.category+(t.due_date?' · '+t.due_date:'')"></p>
+              </div>
+              <button @click="quickDone(t.id)" class="text-xs text-indigo-500 hover:text-indigo-700 font-medium">✓</button>
+            </div>
+          </template>
+          <p x-show="urgentTasks.length===0" class="text-slate-400 text-sm text-center py-4">Tudo em dia! 🎉</p>
+        </div>
+      </div>
+      <div class="bg-white rounded-2xl p-6 shadow-sm border border-slate-100">
+        <h3 class="font-semibold text-slate-700 mb-4">📝 Notas Recentes</h3>
+        <div class="space-y-3">
+          <template x-for="n in notes.slice(0,4)" :key="n.id">
+            <div class="p-3 bg-slate-50 rounded-xl cursor-pointer hover:bg-slate-100" @click="page='notes'">
+              <p class="text-sm font-medium truncate" x-text="n.title"></p>
+              <p class="text-xs text-slate-400 truncate mt-0.5" x-text="n.content"></p>
+              <span class="text-xs mt-1 inline-block px-2 py-0.5 rounded-full" :class="catBadge(n.category)" x-text="n.category"></span>
+            </div>
+          </template>
+          <p x-show="notes.length===0" class="text-slate-400 text-sm text-center py-4">Nenhuma nota ainda</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- TAREFAS -->
+  <div x-show="page==='tasks'" x-cloak class="p-6 md:p-8 fade-in">
+    <div class="flex justify-between items-center mb-6">
+      <h2 class="text-2xl font-bold">Tarefas</h2>
+      <button @click="openTaskModal()" class="bg-indigo-600 text-white px-4 py-2 rounded-xl text-sm font-medium hover:bg-indigo-700 transition">+ Nova</button>
+    </div>
+    <div class="flex gap-2 mb-5 flex-wrap">
+      <template x-for="f in taskFilters" :key="f.v">
+        <button @click="taskFilter=f.v" :class="taskFilter===f.v?'bg-indigo-600 text-white':'bg-white text-slate-600 border border-slate-200'" class="px-4 py-1.5 rounded-full text-sm font-medium transition" x-text="f.l"></button>
+      </template>
+    </div>
+    <div class="space-y-3">
+      <template x-for="t in filteredTasks" :key="t.id">
+        <div class="bg-white rounded-2xl p-4 shadow-sm border border-slate-100 flex items-center gap-4 fade-in">
+          <button @click="quickDone(t.id)" :class="t.status==='done'?'bg-indigo-600 border-indigo-600':'border-slate-300 hover:border-indigo-400'"
+            class="w-6 h-6 rounded-full border-2 flex items-center justify-center transition shrink-0">
+            <span x-show="t.status==='done'" class="text-white text-xs">✓</span>
+          </button>
+          <div class="flex-1 min-w-0">
+            <p class="font-medium" :class="t.status==='done'&&'line-through text-slate-400'" x-text="t.title"></p>
+            <p x-show="t.description" class="text-sm text-slate-400 truncate" x-text="t.description"></p>
+            <div class="flex gap-2 mt-1 flex-wrap">
+              <span class="text-xs px-2 py-0.5 rounded-full font-medium" :class="priBadge(t.priority)" x-text="priLabel(t.priority)"></span>
+              <span class="text-xs px-2 py-0.5 rounded-full bg-slate-100 text-slate-500" x-text="t.category"></span>
+              <span x-show="t.due_date" class="text-xs px-2 py-0.5 rounded-full bg-amber-50 text-amber-700" x-text="'📅 '+t.due_date"></span>
+            </div>
+          </div>
+          <div class="flex gap-1 shrink-0">
+            <button @click="openTaskModal(t)" class="text-slate-400 hover:text-indigo-600 p-1">✏️</button>
+            <button @click="deleteTask(t.id)" class="text-slate-400 hover:text-red-500 p-1">🗑️</button>
+          </div>
+        </div>
+      </template>
+      <p x-show="filteredTasks.length===0" class="text-slate-400 text-center py-12">Nenhuma tarefa aqui</p>
+    </div>
+  </div>
+
+  <!-- NOTAS -->
+  <div x-show="page==='notes'" x-cloak class="p-6 md:p-8 fade-in">
+    <div class="flex justify-between items-center mb-6">
+      <h2 class="text-2xl font-bold">Notas</h2>
+      <button @click="openNoteModal()" class="bg-emerald-600 text-white px-4 py-2 rounded-xl text-sm font-medium hover:bg-emerald-700 transition">+ Nova</button>
+    </div>
+    <div class="flex gap-2 mb-5 flex-wrap">
+      <template x-for="c in noteCats" :key="c.v">
+        <button @click="noteFilter=c.v" :class="noteFilter===c.v?'bg-emerald-600 text-white':'bg-white text-slate-600 border border-slate-200'" class="px-4 py-1.5 rounded-full text-sm font-medium transition" x-text="c.l"></button>
+      </template>
+    </div>
+    <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+      <template x-for="n in filteredNotes" :key="n.id">
+        <div class="bg-white rounded-2xl p-5 shadow-sm border border-slate-100 flex flex-col fade-in">
+          <div class="flex justify-between items-start mb-2">
+            <span class="text-xs px-2 py-0.5 rounded-full font-medium" :class="catBadge(n.category)" x-text="n.category"></span>
+            <div class="flex gap-1">
+              <button @click="openNoteModal(n)" class="text-slate-300 hover:text-indigo-500 text-sm">✏️</button>
+              <button @click="deleteNote(n.id)" class="text-slate-300 hover:text-red-500 text-sm">🗑️</button>
+            </div>
+          </div>
+          <h3 class="font-semibold text-slate-800 mb-2" x-text="n.title"></h3>
+          <p class="text-slate-500 text-sm flex-1 whitespace-pre-wrap" x-text="n.content.length>300?n.content.slice(0,300)+'...':n.content"></p>
+          <div x-show="n.tags" class="mt-3 flex gap-1 flex-wrap">
+            <template x-for="tag in (n.tags||'').split(',').filter(t=>t.trim())" :key="tag">
+              <span class="text-xs bg-slate-100 text-slate-500 px-2 py-0.5 rounded-full" x-text="tag.trim()"></span>
+            </template>
+          </div>
+          <p class="text-xs text-slate-300 mt-3" x-text="fmtDate(n.created_at)"></p>
+        </div>
+      </template>
+      <p x-show="filteredNotes.length===0" class="text-slate-400 text-center py-12 col-span-3">Nenhuma nota nessa categoria</p>
+    </div>
+  </div>
+
+  <!-- FINANÇAS -->
+  <div x-show="page==='finance'" x-cloak class="p-6 md:p-8 fade-in">
+    <div class="flex justify-between items-center mb-6">
+      <h2 class="text-2xl font-bold">Finanças</h2>
+      <button @click="openFinanceModal()" class="bg-amber-500 text-white px-4 py-2 rounded-xl text-sm font-medium hover:bg-amber-600 transition">+ Lançamento</button>
+    </div>
+    <div class="grid grid-cols-3 gap-4 mb-8">
+      <div class="bg-emerald-50 border border-emerald-200 rounded-2xl p-5">
+        <p class="text-emerald-700 text-sm font-medium">Receitas</p>
+        <p class="text-2xl font-bold text-emerald-600 mt-1" x-text="'R$ '+summary.income.toFixed(2)"></p>
+      </div>
+      <div class="bg-red-50 border border-red-200 rounded-2xl p-5">
+        <p class="text-red-700 text-sm font-medium">Despesas</p>
+        <p class="text-2xl font-bold text-red-500 mt-1" x-text="'R$ '+summary.expense.toFixed(2)"></p>
+      </div>
+      <div class="bg-white border border-slate-200 rounded-2xl p-5">
+        <p class="text-slate-500 text-sm font-medium">Saldo</p>
+        <p class="text-2xl font-bold mt-1" :class="summary.balance>=0?'text-emerald-600':'text-red-500'" x-text="'R$ '+summary.balance.toFixed(2)"></p>
+      </div>
+    </div>
+    <div class="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
+      <table class="w-full text-sm">
+        <thead class="bg-slate-50 text-slate-500 text-xs uppercase">
+          <tr>
+            <th class="px-5 py-3 text-left">Data</th>
+            <th class="px-5 py-3 text-left">Descrição</th>
+            <th class="px-5 py-3 text-left hidden md:table-cell">Categoria</th>
+            <th class="px-5 py-3 text-right">Valor</th>
+            <th class="px-5 py-3"></th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-slate-50">
+          <template x-for="e in finances" :key="e.id">
+            <tr class="hover:bg-slate-50 transition">
+              <td class="px-5 py-3 text-slate-400" x-text="e.date"></td>
+              <td class="px-5 py-3 font-medium" x-text="e.description"></td>
+              <td class="px-5 py-3 hidden md:table-cell"><span class="bg-slate-100 text-slate-500 px-2 py-0.5 rounded-full text-xs" x-text="e.category"></span></td>
+              <td class="px-5 py-3 text-right font-semibold" :class="e.type==='income'?'text-emerald-600':'text-red-500'"
+                  x-text="(e.type==='income'?'+':'-')+'R$ '+e.amount.toFixed(2)"></td>
+              <td class="px-5 py-3 text-right"><button @click="deleteFinance(e.id)" class="text-slate-300 hover:text-red-500">🗑️</button></td>
+            </tr>
+          </template>
+        </tbody>
+      </table>
+      <p x-show="finances.length===0" class="text-slate-400 text-center py-12">Nenhum lançamento ainda</p>
+    </div>
+  </div>
+
+  <!-- IA CHAT -->
+  <div x-show="page==='chat'" x-cloak class="flex flex-col h-screen fade-in">
+    <div class="p-6 border-b border-slate-100 bg-white">
+      <h2 class="text-2xl font-bold">🤖 Assistente IA</h2>
+      <p class="text-slate-400 text-sm mt-1">Converse, crie tarefas e notas com inteligência artificial</p>
+    </div>
+
+    <!-- API key config -->
+    <div x-show="!apiKey" class="m-6 bg-amber-50 border border-amber-200 rounded-2xl p-5">
+      <p class="font-semibold text-amber-800 mb-1">🔑 Configure sua chave da IA</p>
+      <p class="text-amber-700 text-sm mb-4">Para usar o assistente, informe sua chave da Anthropic. Ela fica salva só no seu navegador.</p>
+      <div class="flex gap-3">
+        <input x-model="apiKeyInput" type="password" placeholder="sk-ant-..." class="flex-1 border border-amber-300 rounded-xl px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"/>
+        <button @click="saveApiKey()" class="bg-amber-500 text-white px-5 py-2 rounded-xl text-sm font-medium hover:bg-amber-600">Salvar</button>
+      </div>
+      <p class="text-xs text-amber-600 mt-2">Crie sua chave em <strong>console.anthropic.com</strong> → API Keys</p>
+    </div>
+
+    <div x-show="apiKey" class="flex-1 overflow-y-auto p-6 space-y-4" x-ref="chatBox">
+      <template x-for="m in chatHistory" :key="m.id">
+        <div class="flex fade-in" :class="m.role==='user'?'justify-end':'justify-start'">
+          <div class="max-w-[80%] px-4 py-3 text-sm leading-relaxed whitespace-pre-wrap"
+               :class="m.role==='user'?'chat-bubble-user':'chat-bubble-ai'" x-text="m.content"></div>
+        </div>
+      </template>
+      <div x-show="chatLoading" class="flex justify-start">
+        <div class="chat-bubble-ai px-4 py-3 text-sm text-slate-400 animate-pulse">Pensando…</div>
+      </div>
+      <div x-show="chatHistory.length===0&&!chatLoading" class="text-center py-10 text-slate-400">
+        <p class="text-4xl mb-3">🤖</p>
+        <p class="font-medium">Olá! Como posso te ajudar hoje?</p>
+        <div class="mt-6 flex flex-wrap gap-2 justify-center">
+          <template x-for="h in hints" :key="h">
+            <button @click="sendHint(h)" class="text-xs bg-white border border-slate-200 px-3 py-2 rounded-full hover:border-indigo-300 hover:text-indigo-600 transition" x-text="h"></button>
+          </template>
+        </div>
+      </div>
+    </div>
+
+    <div x-show="apiKey" class="p-4 border-t border-slate-100 bg-white">
+      <div class="flex gap-3">
+        <textarea x-model="chatInput" @keydown.enter.prevent="if(!$event.shiftKey) sendChat()"
+          placeholder="Digite… (Enter envia, Shift+Enter nova linha)"
+          class="flex-1 border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300" rows="2"></textarea>
+        <button @click="sendChat()" :disabled="chatLoading||!chatInput.trim()"
+          class="bg-indigo-600 text-white px-5 rounded-xl font-medium text-sm hover:bg-indigo-700 disabled:opacity-40 transition">Enviar</button>
+      </div>
+      <button @click="clearApiKey()" class="text-xs text-slate-300 hover:text-red-400 mt-2">Remover chave da IA</button>
+    </div>
+  </div>
+
+</main>
+
+<!-- TASK MODAL -->
+<div x-show="showTaskModal" x-cloak class="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" @click.self="showTaskModal=false">
+  <div class="bg-white rounded-2xl p-6 w-full max-w-md shadow-xl fade-in">
+    <h3 class="font-bold text-lg mb-5" x-text="editTask.id?'Editar Tarefa':'Nova Tarefa'"></h3>
+    <div class="space-y-4">
+      <input x-model="editTask.title" placeholder="Título *" class="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300"/>
+      <textarea x-model="editTask.description" placeholder="Descrição" rows="2" class="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300"></textarea>
+      <div class="grid grid-cols-2 gap-3">
+        <select x-model="editTask.priority" class="border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300">
+          <option value="low">🟢 Baixa</option>
+          <option value="medium">🟡 Média</option>
+          <option value="high">🔴 Alta</option>
+        </select>
+        <select x-model="editTask.status" class="border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300">
+          <option value="pending">Pendente</option>
+          <option value="in_progress">Em progresso</option>
+          <option value="done">Concluída</option>
+        </select>
+      </div>
+      <input x-model="editTask.category" placeholder="Categoria (trabalho, estudo, pessoal…)" class="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300"/>
+      <input x-model="editTask.due_date" type="date" class="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300"/>
+    </div>
+    <div class="flex gap-3 mt-6">
+      <button @click="saveTask()" class="flex-1 bg-indigo-600 text-white py-2.5 rounded-xl font-medium text-sm hover:bg-indigo-700 transition">Salvar</button>
+      <button @click="showTaskModal=false" class="flex-1 border border-slate-200 py-2.5 rounded-xl text-sm hover:bg-slate-50 transition">Cancelar</button>
+    </div>
+  </div>
+</div>
+
+<!-- NOTE MODAL -->
+<div x-show="showNoteModal" x-cloak class="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" @click.self="showNoteModal=false">
+  <div class="bg-white rounded-2xl p-6 w-full max-w-lg shadow-xl fade-in">
+    <h3 class="font-bold text-lg mb-5" x-text="editNote.id?'Editar Nota':'Nova Nota'"></h3>
+    <div class="space-y-4">
+      <input x-model="editNote.title" placeholder="Título *" class="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-300"/>
+      <select x-model="editNote.category" class="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-300">
+        <option value="geral">Geral</option>
+        <option value="ideia">💡 Ideia</option>
+        <option value="estudo">📚 Estudo</option>
+        <option value="trabalho">💼 Trabalho</option>
+        <option value="pessoal">👤 Pessoal</option>
+      </select>
+      <textarea x-model="editNote.content" placeholder="Conteúdo *" rows="6" class="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-300"></textarea>
+      <input x-model="editNote.tags" placeholder="Tags (ex: python, urgente)" class="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-300"/>
+    </div>
+    <div class="flex gap-3 mt-6">
+      <button @click="saveNote()" class="flex-1 bg-emerald-600 text-white py-2.5 rounded-xl font-medium text-sm hover:bg-emerald-700 transition">Salvar</button>
+      <button @click="showNoteModal=false" class="flex-1 border border-slate-200 py-2.5 rounded-xl text-sm hover:bg-slate-50 transition">Cancelar</button>
+    </div>
+  </div>
+</div>
+
+<!-- FINANCE MODAL -->
+<div x-show="showFinanceModal" x-cloak class="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" @click.self="showFinanceModal=false">
+  <div class="bg-white rounded-2xl p-6 w-full max-w-md shadow-xl fade-in">
+    <h3 class="font-bold text-lg mb-5">Novo Lançamento</h3>
+    <div class="space-y-4">
+      <div class="grid grid-cols-2 gap-3">
+        <button @click="editFinance.type='income'" :class="editFinance.type==='income'?'bg-emerald-600 text-white':'border border-slate-200 text-slate-600'" class="py-2.5 rounded-xl text-sm font-medium transition">+ Receita</button>
+        <button @click="editFinance.type='expense'" :class="editFinance.type==='expense'?'bg-red-500 text-white':'border border-slate-200 text-slate-600'" class="py-2.5 rounded-xl text-sm font-medium transition">- Despesa</button>
+      </div>
+      <input x-model="editFinance.description" placeholder="Descrição *" class="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-300"/>
+      <input x-model="editFinance.amount" type="number" step="0.01" placeholder="Valor (R$) *" class="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-300"/>
+      <input x-model="editFinance.category" placeholder="Categoria (salário, alimentação…)" class="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-300"/>
+      <input x-model="editFinance.date" type="date" class="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-300"/>
+    </div>
+    <div class="flex gap-3 mt-6">
+      <button @click="saveFinance()" class="flex-1 bg-amber-500 text-white py-2.5 rounded-xl font-medium text-sm hover:bg-amber-600 transition">Salvar</button>
+      <button @click="showFinanceModal=false" class="flex-1 border border-slate-200 py-2.5 rounded-xl text-sm hover:bg-slate-50 transition">Cancelar</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const LS = {
+  get: (k,d) => { try { return JSON.parse(localStorage.getItem(k))||d; } catch { return d; } },
+  set: (k,v) => localStorage.setItem(k, JSON.stringify(v)),
+};
+const uid = () => Date.now() + Math.random().toString(36).slice(2);
+
+function app() {
+  return {
+    page: 'dashboard',
+    navItems: [
+      {id:'dashboard',icon:'🏠',label:'Dashboard'},
+      {id:'tasks',icon:'✅',label:'Tarefas'},
+      {id:'notes',icon:'📝',label:'Notas'},
+      {id:'finance',icon:'💰',label:'Finanças'},
+      {id:'chat',icon:'🤖',label:'Assistente IA'},
+    ],
+
+    tasks: [],
+    notes: [],
+    finances: [],
+
+    taskFilter: 'all',
+    taskFilters: [
+      {v:'all',l:'Todas'},{v:'pending',l:'Pendentes'},
+      {v:'in_progress',l:'Em progresso'},{v:'done',l:'Concluídas'},
+      {v:'high',l:'🔴 Alta prioridade'},
+    ],
+    noteFilter: 'all',
+    noteCats: [
+      {v:'all',l:'Todas'},{v:'geral',l:'Geral'},{v:'ideia',l:'💡 Ideias'},
+      {v:'estudo',l:'📚 Estudo'},{v:'trabalho',l:'💼 Trabalho'},{v:'pessoal',l:'👤 Pessoal'},
+    ],
+
+    showTaskModal: false,
+    showNoteModal: false,
+    showFinanceModal: false,
+    editTask: {},
+    editNote: {},
+    editFinance: {},
+
+    chatHistory: [],
+    chatInput: '',
+    chatLoading: false,
+    apiKey: '',
+    apiKeyInput: '',
+    hints: [
+      'Quais são minhas tarefas urgentes?',
+      'Me dá um resumo das finanças',
+      'Cria uma tarefa: estudar amanhã',
+      'Me sugere como organizar meu dia',
+    ],
+
+    init() {
+      this.tasks    = LS.get('mv_tasks', []);
+      this.notes    = LS.get('mv_notes', []);
+      this.finances = LS.get('mv_finances', []);
+      this.chatHistory = LS.get('mv_chat', []);
+      this.apiKey   = localStorage.getItem('mv_apikey') || '';
+    },
+
+    save() {
+      LS.set('mv_tasks', this.tasks);
+      LS.set('mv_notes', this.notes);
+      LS.set('mv_finances', this.finances);
+    },
+
+    get stats() {
+      return {
+        pending: this.tasks.filter(t=>t.status!=='done').length,
+        done: this.tasks.filter(t=>t.status==='done').length,
+      };
+    },
+    get summary() {
+      const income  = this.finances.filter(e=>e.type==='income').reduce((a,e)=>a+e.amount,0);
+      const expense = this.finances.filter(e=>e.type==='expense').reduce((a,e)=>a+e.amount,0);
+      return { income, expense, balance: income - expense };
+    },
+    get urgentTasks() {
+      return this.tasks.filter(t=>t.status!=='done')
+        .sort((a,b)=>({high:0,medium:1,low:2}[a.priority]||1)-({high:0,medium:1,low:2}[b.priority]||1));
+    },
+    get filteredTasks() {
+      if (this.taskFilter==='all') return this.tasks;
+      if (this.taskFilter==='high') return this.tasks.filter(t=>t.priority==='high');
+      return this.tasks.filter(t=>t.status===this.taskFilter);
+    },
+    get filteredNotes() {
+      if (this.noteFilter==='all') return this.notes;
+      return this.notes.filter(n=>n.category===this.noteFilter);
+    },
+
+    // Tasks
+    openTaskModal(t=null) {
+      this.editTask = t ? {...t} : {title:'',description:'',priority:'medium',category:'geral',status:'pending',due_date:''};
+      this.showTaskModal = true;
+    },
+    saveTask() {
+      if (!this.editTask.title.trim()) return;
+      if (this.editTask.id) {
+        const i = this.tasks.findIndex(t=>t.id===this.editTask.id);
+        if (i>=0) this.tasks[i] = {...this.editTask};
+      } else {
+        this.tasks.unshift({...this.editTask, id:uid(), created_at:new Date().toISOString()});
+      }
+      this.save(); this.showTaskModal = false;
+    },
+    deleteTask(id) {
+      if (!confirm('Excluir tarefa?')) return;
+      this.tasks = this.tasks.filter(t=>t.id!==id); this.save();
+    },
+    quickDone(id) {
+      const t = this.tasks.find(t=>t.id===id);
+      if (t) { t.status = t.status==='done' ? 'pending' : 'done'; this.save(); }
+    },
+
+    // Notes
+    openNoteModal(n=null) {
+      this.editNote = n ? {...n} : {title:'',content:'',category:'geral',tags:''};
+      this.showNoteModal = true;
+    },
+    saveNote() {
+      if (!this.editNote.title.trim()||!this.editNote.content.trim()) return;
+      if (this.editNote.id) {
+        const i = this.notes.findIndex(n=>n.id===this.editNote.id);
+        if (i>=0) this.notes[i] = {...this.editNote};
+      } else {
+        this.notes.unshift({...this.editNote, id:uid(), created_at:new Date().toISOString()});
+      }
+      this.save(); this.showNoteModal = false;
+    },
+    deleteNote(id) {
+      if (!confirm('Excluir nota?')) return;
+      this.notes = this.notes.filter(n=>n.id!==id); this.save();
+    },
+
+    // Finance
+    openFinanceModal() {
+      this.editFinance = {description:'',amount:'',type:'income',category:'',date:new Date().toISOString().split('T')[0]};
+      this.showFinanceModal = true;
+    },
+    saveFinance() {
+      if (!this.editFinance.description||!this.editFinance.amount||!this.editFinance.date) return;
+      this.finances.unshift({...this.editFinance, amount:parseFloat(this.editFinance.amount), id:uid(), created_at:new Date().toISOString()});
+      this.finances.sort((a,b)=>b.date.localeCompare(a.date));
+      this.save(); this.showFinanceModal = false;
+    },
+    deleteFinance(id) {
+      if (!confirm('Excluir lançamento?')) return;
+      this.finances = this.finances.filter(e=>e.id!==id); this.save();
+    },
+
+    // API key
+    saveApiKey() {
+      this.apiKey = this.apiKeyInput.trim();
+      localStorage.setItem('mv_apikey', this.apiKey);
+      this.apiKeyInput = '';
+    },
+    clearApiKey() {
+      this.apiKey = ''; localStorage.removeItem('mv_apikey');
+    },
+
+    // Chat
+    buildContext() {
+      const pending = this.tasks.filter(t=>t.status!=='done');
+      let ctx = `TAREFAS PENDENTES (${pending.length}):\n`;
+      pending.forEach(t=>{ ctx+=`  [${t.priority.toUpperCase()}] ${t.title}${t.due_date?' (vence:'+t.due_date+')':''}\n`; });
+      ctx += `\nNOTAS (${this.notes.length}):\n`;
+      this.notes.slice(0,10).forEach(n=>{ ctx+=`  [${n.category}] ${n.title}: ${n.content.slice(0,100)}\n`; });
+      ctx += `\nFINANÇAS: Receitas R$${this.summary.income.toFixed(2)} | Despesas R$${this.summary.expense.toFixed(2)} | Saldo R$${this.summary.balance.toFixed(2)}\n`;
+      return ctx;
+    },
+    async sendChat() {
+      const msg = this.chatInput.trim();
+      if (!msg||this.chatLoading||!this.apiKey) return;
+      this.chatInput = '';
+      this.chatLoading = true;
+      this.chatHistory.push({id:uid(), role:'user', content:msg});
+      this.$nextTick(()=>this.scrollChat());
+
+      const systemPrompt = `Você é um assistente pessoal inteligente chamado Minha Vida.
+Ajuda o usuário a organizar tarefas, notas, finanças e estudos. Responda sempre em português do Brasil de forma concisa e prática.
+Quando o usuário pedir para criar algo, indique claramente que ele pode usar os botões "+ Nova Tarefa", "+ Nova Nota" ou "+ Lançamento" para adicionar diretamente.
+
+CONTEXTO ATUAL DO USUÁRIO:
+${this.buildContext()}`;
+
+      const messages = this.chatHistory.slice(-10).map(m=>({role:m.role, content:m.content}));
+
+      try {
+        const res = await fetch('https://api.anthropic.com/v1/messages', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-api-key': this.apiKey,
+            'anthropic-version': '2023-06-01',
+            'anthropic-dangerous-direct-browser-access': 'true',
+          },
+          body: JSON.stringify({
+            model: 'claude-haiku-4-5-20251001',
+            max_tokens: 1024,
+            system: systemPrompt,
+            messages,
+          }),
+        });
+        const data = await res.json();
+        if (data.error) throw new Error(data.error.message);
+        const reply = data.content?.[0]?.text || 'Sem resposta.';
+        this.chatHistory.push({id:uid(), role:'assistant', content:reply});
+      } catch(e) {
+        this.chatHistory.push({id:uid(), role:'assistant', content:`Erro: ${e.message}. Verifique se sua chave da API está correta.`});
+      } finally {
+        this.chatLoading = false;
+        LS.set('mv_chat', this.chatHistory.slice(-50));
+        this.$nextTick(()=>this.scrollChat());
+      }
+    },
+    sendHint(h) { this.chatInput=h; this.sendChat(); },
+    scrollChat() {
+      const el = this.$refs.chatBox;
+      if (el) el.scrollTop = el.scrollHeight;
+    },
+
+    // Helpers
+    priDot: p=>({high:'bg-red-500',medium:'bg-amber-400',low:'bg-emerald-400'}[p]||'bg-slate-300'),
+    priBadge: p=>({high:'bg-red-100 text-red-700',medium:'bg-amber-100 text-amber-700',low:'bg-emerald-100 text-emerald-700'}[p]||'bg-slate-100 text-slate-500'),
+    priLabel: p=>({high:'🔴 Alta',medium:'🟡 Média',low:'🟢 Baixa'}[p]||p),
+    catBadge: c=>({ideia:'bg-purple-100 text-purple-700',estudo:'bg-blue-100 text-blue-700',trabalho:'bg-slate-100 text-slate-700',pessoal:'bg-pink-100 text-pink-700',geral:'bg-slate-100 text-slate-500'}[c]||'bg-slate-100 text-slate-500'),
+    fmtDate: d=>d?new Date(d).toLocaleDateString('pt-BR',{day:'2-digit',month:'short',year:'numeric'}):'',
+  };
+}
+</script>
+</body>
+</html>
